@@ -9,6 +9,14 @@ It's a multi-agent system: a root **orchestrator** fans out to three specialist
 subagents in parallel, then fuses and de-duplicates their findings into a single
 severity-ranked report. Built to run live on Vercel.
 
+## Example output
+
+[![Design QA Agent — example report](examples/sample-report.png)](examples/sample-report.html)
+
+A real run against `design-to-code-demo.vercel.app`. View the full report:
+**[examples/sample-report.html](examples/sample-report.html)** (or the
+[screenshot](examples/sample-report.png) above).
+
 ## What it actually does
 
 Send it a URL (in chat locally, or via the HTTP API when deployed). The
