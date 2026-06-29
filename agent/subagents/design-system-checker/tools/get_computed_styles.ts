@@ -1,0 +1,64 @@
+import { defineTool } from "eve/tools";
+import { z } from "zod";
+
+// Collects the *rendered* style values on the page (computed styles), so we can
+// compare them against design tokens. Runs inside Browserless's browser.
+const BROWSERLESS_BASE =
+  process.env.BROWSERLESS_URL ?? "https://production-sfo.browserless.io";
+
+// URL is INLINED into the code (Browserless /function does not pass `context`
+// through reliably — relying on it audited Browserless's own runner page).
+function buildStylesCode(url: string): string {
+  return `export default async function ({ page }) {
+    await page.goto(${JSON.stringify(url)}, { waitUntil: "networkidle2", timeout: 60000 });
+    const data = await page.evaluate(() => {
+      const colors = new Set(); const fontSizes = new Set();
+      const radii = new Set(); const spacing = new Set();
+      const els = Array.from(document.querySelectorAll("body *")).slice(0, 4000);
+      for (const el of els) {
+        const s = getComputedStyle(el);
+        if (s.color) colors.add(s.color);
+        if (s.backgroundColor && s.backgroundColor !== "rgba(0, 0, 0, 0)") colors.add(s.backgroundColor);
+        if (s.fontSize) fontSizes.add(s.fontSize);
+        if (s.borderTopLeftRadius && s.borderTopLeftRadius !== "0px") radii.add(s.borderTopLeftRadius);
+        for (const p of ["marginTop","marginBottom","paddingTop","paddingBottom","gap"]) {
+          const v = s[p]; if (v && v !== "0px" && v !== "normal") spacing.add(v);
+        }
+      }
+      const cap = (set) => Array.from(set).slice(0, 50);
+      return { title: document.title, url: location.href,
+        colors: cap(colors), fontSizes: cap(fontSizes), radii: cap(radii), spacing: cap(spacing) };
+    });
+    return { data, type: "application/json" };
+  }`;
+}
+
+export default defineTool({
+  description:
+    "Collect the rendered (computed) colors, font sizes, border radii, and spacing values used on a page, for comparison against design tokens. Also returns the audited page's title/url.",
+  inputSchema: z.object({
+    url: z.string().url(),
+  }),
+  async execute({ url }) {
+    const res = await fetch(
+      `${BROWSERLESS_BASE}/function?token=${process.env.BROWSERLESS_TOKEN}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/javascript" },
+        body: buildStylesCode(url),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Browserless /function failed: ${res.status} ${await res.text()}`);
+    }
+    const out = (await res.json()) as {
+      title?: string;
+      url?: string;
+      colors: string[];
+      fontSizes: string[];
+      radii: string[];
+      spacing: string[];
+    };
+    return { requestedUrl: url, auditedTitle: out.title ?? "", auditedUrl: out.url ?? "", ...out };
+  },
+});

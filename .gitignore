@@ -1,0 +1,19 @@
+# Secrets — NEVER commit
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# eve build + dev-runtime artifacts (includes source snapshots)
+.eve/
+.output/
+.workflow-data/
+
+# Vercel
+.vercel
+
+# OS / editor
+.DS_Store
+*.log
