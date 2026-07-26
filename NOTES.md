@@ -7,12 +7,13 @@ relive the debugging.
 
 ## What it is
 
-An orchestrator (root agent) that fans out to three declared subagents in
-parallel and fuses their findings into one design-QA report for a URL:
+An orchestrator (root agent) that stages specialists and fuses their findings
+into one design-QA report for a URL:
 
-- **a11y-auditor** → `run_axe` (axe-core in headless Chrome via Browserless)
-- **heuristic-critic** → `critique_page` (screenshot + OpenRouter vision model)
-- **design-system-checker** → `get_computed_styles` + `read_design_tokens`
+- **Stage 1 (parallel):** `a11y-auditor` → `run_axe`; `design-system-checker` →
+  `get_computed_styles` + `read_design_tokens`
+- **Stage 2:** `heuristic-critic` → `critique_page` (DOM geometry + screenshot +
+  vision), with condensed axe findings as `axeContext`
 
 Plus a GitHub MCP connection (PR-comment mode), HTTP Basic route auth, and
 OpenRouter models. Deployed on Vercel.
@@ -28,11 +29,15 @@ OpenRouter models. Deployed on Vercel.
   inside a Vercel function busts the 250 MB limit and cold-start budget. The
   tools call Browserless's hosted Chrome over HTTP instead.
 - **Vision happens inside the tool.** eve tool results are text/json, so a
-  subagent's model can't be handed a raw image. `critique_page` screenshots and
-  calls the vision model itself, returning parsed findings.
+  subagent's model can't be handed a raw image. `critique_page` captures
+  screenshot + focusable geometry in one Browserless session, measures sub-24px
+  targets, then calls the vision model for judgment items.
 - **Subagents inherit nothing.** Each declared subagent has its own `tools/`
   (and would need its own `connections/`). The GitHub connection is root-only —
   the orchestrator is the sole writer.
+- **Browserless `/function` envelope.** Runner code returns
+  `{ data, type: "application/json" }`; tools must unwrap `.data` (see
+  `agent/lib/browserless.ts`) or every audit looks empty.
 
 ## Bugs found (the actual learning)
 
@@ -73,16 +78,23 @@ OpenRouter models. Deployed on Vercel.
    `anthropic/claude-sonnet-4.6`. **Lesson: trust the child trace, not the
    parent's "completed successfully."**
 
+## Fixes landed (local — redeploy to ship)
+
+7. **Browserless `{ data, type }` not unwrapped** — `run_axe` / `get_computed_styles`
+   read top-level fields and always returned empty. Fixed via
+   `agent/lib/browserless.ts` (`unwrapBrowserlessData` + auditedUrl guards).
+
+8. **Parallel Browserless 429** — shared fetch retries 429/502/503/504 with
+   backoff (also used by screenshot / capture).
+
+9. **Grounded heuristic-critic** — `critique_page` now measures focusables +
+   sub-24×24px targets in-page; orchestrator is **staged** (a11y + design-system
+   → heuristic with `axeContext`). Vision no longer invents target-size failures.
+
 ## Known issues / open items
 
-- **a11y under-reports under parallel fan-out.** When the three subagents hit
-  Browserless simultaneously, `a11y-auditor` has come back "clean" while a
-  solo probe found 3 real axe violations (`button-name`, `color-contrast`,
-  `heading-order`). Likely a not-fully-rendered page or a throttled concurrent
-  session. Fix options: delegate sequentially, or make `run_axe` wait for full
-  load / retry. Treat axe "clean" with suspicion until fixed.
-- **Vision findings can over-assert.** `heuristic-critic` output is plausible and
-  page-specific, but spot-check specifics before acting on them.
+- **Vision judgment can still over-assert** on hierarchy / alt-text quality —
+  spot-check those items; target size and tab-order should now cite measured data.
 - **Cost.** All agents currently run on `claude-sonnet-4.6`. Swap subagents to a
   cheaper model id you've verified exists on openrouter.ai/models (the
   `claude-3.5-haiku` slug is dead; current cheap option is Claude Haiku 4.5).
@@ -90,8 +102,10 @@ OpenRouter models. Deployed on Vercel.
   output with no LLM in the loop — it was how the wrong-page and 404 bugs were
   found. Deleted now that the pipeline is trusted; re-add a similar raw-output
   probe if you need to debug the tool layer again.
-- **Design tokens**: set `DESIGN_TOKENS_URL` to a raw DTCG/Style-Dictionary JSON
+- **Design tokens**: set `DESIGN_TOKENS_URL` to a raw DTCG/Style Dictionary JSON
   to turn `design-system-checker` from "observed values" into pass/fail.
+- **Prod lag.** Redeploy after the unwrap / retry / grounded-critic changes;
+  older deployments still drop `/function` results.
 
 ## How to run
 

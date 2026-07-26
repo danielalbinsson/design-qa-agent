@@ -2,13 +2,13 @@
 
 Run these from your **own Terminal** in the project root (not from the agent
 sandbox). Assumes the project is its own git repo and you have the Vercel CLI
-(`npm i -g vercel`) logged in.
+(`npm i -g vercel`) logged in. Prefer `pnpm` in this repo.
 
 ## 0. Pre-flight
 
 ```bash
-npm install
-npm run build          # eve build — must succeed locally first
+pnpm install
+pnpm run build          # eve build — must succeed locally first
 ```
 
 Open `.eve/compile/compiled-agent-manifest.json` and confirm it lists all three
@@ -37,13 +37,17 @@ Variables:
 | `BROWSERLESS_URL` | yes | Your region base, e.g. `https://production-sfo.browserless.io`. |
 | `VISION_MODEL` | no | Defaults to `anthropic/claude-sonnet-4.6`. |
 | `DESIGN_TOKENS_URL` | no | DTCG/Style Dictionary JSON; omit to report observed values only. |
-| `ROUTE_AUTH_BASIC_PASSWORD` | yes | Route auth — must match what you pass to `curl -u`. |
+| `ROUTE_AUTH_BASIC_PASSWORD` | yes | HTTP Basic password — must match `curl -u daniel:$ROUTE_AUTH_BASIC_PASSWORD`. |
 | `GITHUB_TOKEN` | for PR mode | GitHub PAT (Pull requests: read+write) for the `github` connection. |
 | `GITHUB_MCP_URL` | no | Override the GitHub MCP server URL. |
 
 Because the agents use a **direct OpenRouter provider** (not the Vercel AI
 Gateway), you do **not** need `AI_GATEWAY_API_KEY` or gateway OIDC for model
-calls. `vercelOidc()` route auth still uses project OIDC automatically.
+calls.
+
+Route auth is **`httpBasic({ username: "daniel", password: ROUTE_AUTH_BASIC_PASSWORD })`
++ `localDev()`** in `agent/channels/eve.ts`. Do not rely on `vercelOidc()` for
+driving this deployment — the local CLI OIDC token often fails project matching.
 
 ## 3. Deploy
 
@@ -64,37 +68,43 @@ Health is public:
 curl https://<your-app>.vercel.app/eve/v1/health
 ```
 
-Drive a real turn. The session/stream routes are guarded by `vercelOidc()` +
-`localDev()`, so the easy path is the dev TUI pointed at the deployment:
+Drive a real turn with HTTP Basic (this is the supported path):
 
 ```bash
-vercel link            # if not already linked, so a project OIDC token resolves
-npx eve dev https://<your-app>.vercel.app
-# then: "Audit https://example.com for design QA"
+curl -u "daniel:$ROUTE_AUTH_BASIC_PASSWORD" -X POST \
+  https://<your-app>.vercel.app/eve/v1/session \
+  -H 'content-type: application/json' \
+  -d '{"message":"Audit https://example.com for design QA"}'
+# → { "sessionId": "wrun_…", … }
+
+curl -u "daniel:$ROUTE_AUTH_BASIC_PASSWORD" \
+  https://<your-app>.vercel.app/eve/v1/session/<sessionId>/stream
 ```
 
-If the deployment uses Vercel preview protection, set
-`VERCEL_AUTOMATION_BYPASS_SECRET` locally before `eve dev`.
+Local interactive (no Basic needed — `localDev()`): `nvm use 24 && pnpm run dev`.
 
-> Want to hit it with plain `curl`/Postman from anywhere instead? Switch
-> `agent/channels/eve.ts` to the `httpBasic(...)` walk (commented in that file),
-> set `ROUTE_AUTH_BASIC_PASSWORD`, and send an `Authorization: Basic ...` header.
-> Verify `httpBasic`'s exact signature against your installed eve first.
+If the deployment uses Vercel preview protection, set
+`VERCEL_AUTOMATION_BYPASS_SECRET` on curl/preview requests as well.
 
 ## 5. Watch it run
 
 In the Vercel dashboard: **Observability → Agent Runs** (gated feature — ask your
 Vercel contact to enable it for your team if the tab is missing) to browse
-sessions and drill into the three-way parallel subagent trace. Logs live under
-**Observability → Logs**.
+sessions and drill into the staged subagent trace (a11y + design-system, then
+heuristic). Logs live under **Observability → Logs**. Prefer **child session
+streams** when debugging empty specialist output — the parent can look “successful”
+while a child 404’d on the model.
 
 ## Common failures
 
 - **Build fails on a provider import** → make sure `@openrouter/ai-sdk-provider`
   is in `dependencies` (it is) and the version matches your eve toolchain.
-- **All turns 401** → that's route auth working; use `eve dev <url>` with a
-  linked project, or switch to httpBasic.
+- **All turns 401** → route auth working; use `curl -u daniel:$ROUTE_AUTH_BASIC_PASSWORD`.
 - **Tool calls time out** → Browserless cold start + page load; bump the
   function's max duration in Vercel project settings if needed.
+- **a11y / styles return empty title/url** → Browserless `/function` payloads must
+  unwrap `{ data, type }` (handled in `agent/lib/browserless.ts`). Redeploy if
+  prod predates that fix.
+- **429 from Browserless** → concurrent specialist calls; tools retry with backoff.
 - **Vision tool returns "not valid JSON"** → the model wrapped output; the tool
   already strips code fences, but check `VISION_MODEL` actually supports images.

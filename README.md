@@ -5,9 +5,19 @@ Give it a URL and it returns one consolidated report covering accessibility,
 UX/heuristics, and design-token conformance. Optionally, point it at a pull
 request and it posts that report as a PR comment.
 
-It's a multi-agent system: a root **orchestrator** fans out to three specialist
-subagents in parallel, then fuses and de-duplicates their findings into a single
-severity-ranked report. Built to run live on Vercel.
+It's a multi-agent system: a root **orchestrator** runs **a11y** and
+**design-system** in parallel, then a grounded **heuristic** pass (with axe
+context), and fuses everything into one severity-ranked report. Built to run
+live on Vercel.
+
+## How it works
+
+[![How the Design QA Agent works](examples/architecture.png)](examples/architecture.svg)
+
+A request (URL or PR) hits the orchestrator. Stage 1 fans out a11y + design-system
+in parallel; Stage 2 runs the heuristic critic with condensed axe findings so
+target-size / focus-order claims are measured, not guessed. Subagents run with
+isolated context; only the orchestrator writes.
 
 ## Example output
 
@@ -20,13 +30,13 @@ A real run against `design-to-code-demo.vercel.app`. View the full report:
 ## What it actually does
 
 Send it a URL (in chat locally, or via the HTTP API when deployed). The
-orchestrator delegates, in parallel, to:
+orchestrator delegates in two stages:
 
-| Subagent | Checks | How |
-|---|---|---|
-| **a11y-auditor** | WCAG accessibility violations | axe-core in real headless Chrome (Browserless) |
-| **heuristic-critic** | Visual hierarchy, focus order, target size, alt-text quality, and the judgment items automation misses | screenshot → OpenRouter vision model |
-| **design-system-checker** | Rendered colors / spacing / radii / type vs. your design tokens | computed styles (Browserless) vs. a DTCG token file |
+| Stage | Subagent | Checks | How |
+|---|---|---|---|
+| 1 (parallel) | **a11y-auditor** | WCAG accessibility violations | axe-core in real headless Chrome (Browserless) |
+| 1 (parallel) | **design-system-checker** | Rendered colors / spacing / radii / type vs. your design tokens | computed styles (Browserless) vs. a DTCG token file |
+| 2 | **heuristic-critic** | Hierarchy, alt-text quality, judgment items; measured target size + tab order | DOM geometry + screenshot → OpenRouter vision (axe context passed in) |
 
 The orchestrator then merges overlapping findings (e.g. a contrast issue caught
 by both axe and the token check), groups by severity (critical → minor), and
@@ -49,12 +59,13 @@ design-qa-agent/
 ├── .env.example
 └── agent/
     ├── agent.ts                       # orchestrator (OpenRouter model)
-    ├── instructions.md                # parallel fan-out + fuse + dedupe + PR posting
+    ├── instructions.md                # staged fan-out + fuse + dedupe + PR posting
+    ├── lib/browserless.ts             # unwrap /function envelope + 429 retry
     ├── channels/eve.ts                # HTTP route auth (httpBasic + localDev)
     ├── connections/github.ts          # GitHub MCP — posts the PR comment (root-only)
     └── subagents/
         ├── a11y-auditor/              # → run_axe (Browserless + axe-core)
-        ├── heuristic-critic/          # → critique_page (screenshot + vision)
+        ├── heuristic-critic/          # → critique_page (geometry + screenshot + vision)
         └── design-system-checker/     # → get_computed_styles + read_design_tokens
 ```
 
@@ -64,8 +75,8 @@ Requires Node 24 (`nvm use 24`).
 
 ```bash
 cp .env.example .env      # OPENROUTER_API_KEY, BROWSERLESS_TOKEN, ROUTE_AUTH_BASIC_PASSWORD, …
-npm install
-npm run dev               # eve dev — chat with it locally
+pnpm install
+pnpm run dev              # eve dev — chat with it locally
 ```
 
 Then type: `Audit https://example.com for design QA`.
@@ -100,8 +111,9 @@ curl -u daniel:$ROUTE_AUTH_BASIC_PASSWORD -X POST \
 
 - **OpenRouter, not the AI Gateway** — provider model via `@openrouter/ai-sdk-provider`; every agent sets `modelContextWindowTokens` (OpenRouter models aren't in the Gateway catalog, so compaction needs it).
 - **Browserless, not bundled Chromium** — keeps the Vercel function tiny; tools call hosted Chrome over HTTP.
-- **Vision lives inside `critique_page`** — eve tool results are text/json, so the screenshot is sent to the vision model by the tool, not the subagent's own model.
+- **Vision lives inside `critique_page`** — eve tool results are text/json, so the screenshot is sent to the vision model by the tool, not the subagent's own model. Target size is measured from the DOM in the same Browserless session.
 - **Subagents inherit nothing** — each has its own `tools/`; the GitHub connection is root-only so the orchestrator is the sole writer.
+- **Staged heuristic** — a11y runs before heuristic so axe context can be passed in; avoids duplicate findings and grounds the critic.
 
 ## Status & known issues
 
@@ -109,8 +121,7 @@ The full multi-agent pipeline builds, deploys, and runs. **Before relying on the
 output, read `NOTES.md`** — it documents the build, every bug found, and the open
 items, notably:
 
-- **a11y can under-report under parallel fan-out** (axe sometimes returns "clean"
-  while a solo probe finds violations) — verify axe results.
-- **Vision findings can over-assert** — spot-check specifics against the page.
+- Vision judgment items can still over-assert on hierarchy/alt quality — spot-check.
 - All agents run on `claude-sonnet-4.6`; swap subagents to a cheaper verified
   model id to cut cost.
+- Redeploy after the Browserless unwrap / retry fix if production predates it.

@@ -1,0 +1,20 @@
+{
+  "capturedAt": "2026-07-26T16:04:56.029Z",
+  "name": "design-qa-agent",
+  "mind": {
+    "model": "openrouter/anthropic/claude-sonnet-4.6",
+    "instructionsHash": "from-build"
+  },
+  "capabilities": [],
+  "reach": [
+    "github"
+  ],
+  "autonomy": [],
+  "subagents": [
+    "a11y-auditor",
+    "design-system-checker",
+    "heuristic-critic"
+  ],
+  "restrictions": [],
+  "note": "Regenerated from .eve/agent-summary.json after eve build. From build for subagents/model; not a substitute for Aletheia CLI diff."
+}

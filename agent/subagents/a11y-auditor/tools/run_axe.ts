@@ -1,11 +1,10 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
+import { browserlessFunction } from "../../../lib/browserless";
 
 // Browserless runs a real headless Chrome and lets us inject + run axe-core in
 // the page, then returns the JSON result. We deliberately do NOT bundle
 // Chromium into the Vercel function (the "headless-Chrome-on-Vercel trap").
-const BROWSERLESS_BASE =
-  process.env.BROWSERLESS_URL ?? "https://production-sfo.browserless.io";
 
 // IMPORTANT: Browserless's /function does NOT reliably pass our `context` object
 // into the function (the signature it invokes doesn't hand it through), so the
@@ -33,6 +32,12 @@ type AxeRule = {
   nodes?: AxeNode[];
 };
 
+type AxePayload = {
+  title?: string;
+  url?: string;
+  results?: { violations?: AxeRule[]; incomplete?: AxeRule[] };
+};
+
 const mapRule = (r: AxeRule) => ({
   id: r.id,
   impact: r.impact ?? "minor",
@@ -55,32 +60,23 @@ export default defineTool({
         ? ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]
         : ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
-    const res = await fetch(
-      `${BROWSERLESS_BASE}/function?token=${process.env.BROWSERLESS_TOKEN}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/javascript" },
-        body: buildAxeCode(url, tags),
-      },
+    const payload = await browserlessFunction<AxePayload>(
+      buildAxeCode(url, tags),
     );
 
-    if (!res.ok) {
+    const auditedUrl = payload.url ?? "";
+    if (!auditedUrl) {
       throw new Error(
-        `Browserless /function failed: ${res.status} ${await res.text()}`,
+        "Browserless axe run returned no audited URL — response may be malformed or the page failed to load",
       );
     }
 
-    const payload = (await res.json()) as {
-      title?: string;
-      url?: string;
-      results?: { violations?: AxeRule[]; incomplete?: AxeRule[] };
-    };
     const axe = payload.results ?? {};
 
     return {
       requestedUrl: url,
       auditedTitle: payload.title ?? "",
-      auditedUrl: payload.url ?? "",
+      auditedUrl,
       standard,
       violations: (axe.violations ?? []).map(mapRule),
       incomplete: (axe.incomplete ?? []).map(mapRule),

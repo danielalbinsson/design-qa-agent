@@ -11,7 +11,7 @@ const openrouter = createOpenRouter({
 // cheap text model is fine here.
 export default defineAgent({
   description:
-    "Critiques a page's visual/UX quality from a screenshot — hierarchy, grouping, focus order, alt-text quality, and WCAG 2.2 interaction criteria that automated checkers miss.",
+    "Critiques a page's visual/UX quality from a screenshot plus measured focusable geometry — hierarchy, grouping, alt-text quality, and WCAG 2.2 target size from DOM bounds. Accepts optional axe context so it does not re-report automation hits.",
   // "anthropic/claude-3.5-haiku" 404s on OpenRouter (subagent returned empty).
   // sonnet-4.6 is proven to resolve; swap to a verified cheaper id if desired.
   model: openrouter("anthropic/claude-sonnet-4.6"),

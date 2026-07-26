@@ -1,10 +1,9 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
+import { browserlessFunction } from "../../../lib/browserless";
 
 // Collects the *rendered* style values on the page (computed styles), so we can
 // compare them against design tokens. Runs inside Browserless's browser.
-const BROWSERLESS_BASE =
-  process.env.BROWSERLESS_URL ?? "https://production-sfo.browserless.io";
 
 // URL is INLINED into the code (Browserless /function does not pass `context`
 // through reliably — relying on it audited Browserless's own runner page).
@@ -33,6 +32,15 @@ function buildStylesCode(url: string): string {
   }`;
 }
 
+type StylesPayload = {
+  title?: string;
+  url?: string;
+  colors?: string[];
+  fontSizes?: string[];
+  radii?: string[];
+  spacing?: string[];
+};
+
 export default defineTool({
   description:
     "Collect the rendered (computed) colors, font sizes, border radii, and spacing values used on a page, for comparison against design tokens. Also returns the audited page's title/url.",
@@ -40,25 +48,23 @@ export default defineTool({
     url: z.string().url(),
   }),
   async execute({ url }) {
-    const res = await fetch(
-      `${BROWSERLESS_BASE}/function?token=${process.env.BROWSERLESS_TOKEN}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/javascript" },
-        body: buildStylesCode(url),
-      },
-    );
-    if (!res.ok) {
-      throw new Error(`Browserless /function failed: ${res.status} ${await res.text()}`);
+    const out = await browserlessFunction<StylesPayload>(buildStylesCode(url));
+
+    const auditedUrl = out.url ?? "";
+    if (!auditedUrl) {
+      throw new Error(
+        "Browserless styles run returned no audited URL — response may be malformed or the page failed to load",
+      );
     }
-    const out = (await res.json()) as {
-      title?: string;
-      url?: string;
-      colors: string[];
-      fontSizes: string[];
-      radii: string[];
-      spacing: string[];
+
+    return {
+      requestedUrl: url,
+      auditedTitle: out.title ?? "",
+      auditedUrl,
+      colors: out.colors ?? [],
+      fontSizes: out.fontSizes ?? [],
+      radii: out.radii ?? [],
+      spacing: out.spacing ?? [],
     };
-    return { requestedUrl: url, auditedTitle: out.title ?? "", auditedUrl: out.url ?? "", ...out };
   },
 });
