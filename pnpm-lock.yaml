@@ -15,8 +15,8 @@ importers:
         specifier: ^7.0.4
         version: 7.0.4(zod@4.4.3)
       eve:
-        specifier: ^0.16.2
-        version: 0.16.2(@opentelemetry/api@1.9.0)(ai@7.0.4(zod@4.4.3))(microsandbox@0.6.0)
+        specifier: ^0.27.6
+        version: 0.27.6(@opentelemetry/api@1.9.0)(ai@7.0.4(zod@4.4.3))(microsandbox@0.6.0)
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -266,45 +266,24 @@ packages:
       wrangler:
         optional: true
 
-  eve@0.16.2:
-    resolution: {integrity: sha512-zBq/dd2nDfI3aaDrmviWN2IlRbTkdYXhyUCxrif/+wCe5i49vf84//X8KR+nEexmkNnd4s9oenbQVTU27fR86g==}
+  eve@0.27.6:
+    resolution: {integrity: sha512-t2Xr/nlVGc0+Fy9fav8p/CJrwMSQM0zyuOGY1F1XapN0UFssGYBGa6Ml/Q5OnowvWwsGH4m0Tf2QAccayVCvtw==}
     engines: {node: '>=24'}
     hasBin: true
     peerDependencies:
       '@opentelemetry/api': ^1.0.0
-      '@sveltejs/kit': ^2.0.0
-      ai: ^7.0.0
+      ai: ^7.0.34
       braintrust: ^3.0.0
       just-bash: ^3.0.0
       microsandbox: ^0.5.0
-      next: ^16.0.0
-      nuxt: ^4.0.0
-      react: ^19.0.0
-      svelte: ^5.0.0
-      vite: ^8.0.0
-      vue: ^3.5.0
     peerDependenciesMeta:
       '@opentelemetry/api':
-        optional: true
-      '@sveltejs/kit':
         optional: true
       braintrust:
         optional: true
       just-bash:
         optional: true
       microsandbox:
-        optional: true
-      next:
-        optional: true
-      nuxt:
-        optional: true
-      react:
-        optional: true
-      svelte:
-        optional: true
-      vite:
-        optional: true
-      vue:
         optional: true
 
   eventsource-parser@3.1.0:
@@ -633,7 +612,7 @@ snapshots:
       httpxy: 0.5.3
       srvx: 0.11.17
 
-  eve@0.16.2(@opentelemetry/api@1.9.0)(ai@7.0.4(zod@4.4.3))(microsandbox@0.6.0):
+  eve@0.27.6(@opentelemetry/api@1.9.0)(ai@7.0.4(zod@4.4.3))(microsandbox@0.6.0):
     dependencies:
       ai: 7.0.4(zod@4.4.3)
       nitro: 3.0.260610-beta
@@ -675,6 +654,7 @@ snapshots:
       - rollup
       - sqlite3
       - uploadthing
+      - vite
       - wrangler
       - xml2js
       - zephyr-agent
