@@ -10,6 +10,23 @@ It's a multi-agent system: a root **orchestrator** runs **a11y** and
 context), and fuses everything into one severity-ranked report. Built to run
 live on Vercel.
 
+## Stack — how this fits
+
+This agent is the runnable proof in a supervised-delegation stack. Use the
+pieces in this order when you want the full picture:
+
+| Surface | Job | Link |
+|---|---|---|
+| [Agentic UX](https://agentic-ux.com) | Lifecycle vocabulary (Before / While / After) | Patterns + [hire / consult](https://agentic-ux.com/hire) |
+| [Agentic Kit](https://agentic-kit.dev) | Trust product shell — inspect, gate, stamp | [Kit Certified gallery](https://agentic-kit.dev) · [Capability Review](https://agentic-kit.dev/review) |
+| [Aletheia](https://github.com/danielalbinsson/Aletheia) | Self-portrait + CI authority diff | `npx @danielalbinsson/aletheia-cli` |
+| [eve-blueprints](https://github.com/danielalbinsson/eve-blueprints) | Copyable Eve templates with lifecycle docs | Same Kit Certified contract as this agent |
+
+**Kit Certified:** the gallery passport and portrait for this agent are generated
+by Aletheia (not hand-authored screenshots). Fetch
+[`/passports/design-qa-agent.json`](https://agentic-kit.dev/passports/design-qa-agent.json)
+to verify.
+
 ## How it works
 
 [![How the Design QA Agent works](examples/architecture.png)](examples/architecture.svg)
@@ -125,3 +142,11 @@ items, notably:
 - All agents run on `claude-sonnet-4.6`; swap subagents to a cheaper verified
   model id to cut cost.
 - Redeploy after the Browserless unwrap / retry fix if production predates it.
+
+---
+
+Built by [Daniel Albinsson](https://danielalbinsson.com) — [Agentic UX](https://agentic-ux.com)
+framework · [Agentic Kit](https://agentic-kit.dev) (inspect / gate / stamp) ·
+[Aletheia](https://github.com/danielalbinsson/Aletheia).
+[Hire / consult](https://agentic-ux.com/hire) ·
+[Capability Review](https://agentic-kit.dev/review)
