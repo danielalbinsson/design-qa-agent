@@ -1,11 +1,11 @@
- ■ 🎨 Design QA Report — https://design-to-code-demo.vercel.app/
+ ■ Design QA Report: https://design-to-code-demo.vercel.app/
   
   Summary: 2 critical · 3 serious · 4 moderate · 3 minor issues found across accessibility,
   heuristics, and design-token compliance audits.
   
   ---
   
-  ▶ 🔴 Critical
+  ▶ Critical
   
   #    Title                                         Location
   Source(s)                            WCAG                         Recommendation
@@ -25,7 +25,7 @@
   
   ---
   
-  ▶ 🟠 Serious
+  ▶ Serious
   
   #    Title                                            Location
   Source(s)                            WCAG                  Recommendation
@@ -46,7 +46,7 @@
   
   ---
   
-  ▶ 🟡 Moderate
+  ▶ Moderate
   
   #    Title                                 Location                                  Source(s)
   WCAG   Recommendation
@@ -70,7 +70,7 @@
   
   ---
   
-  ▶ 🔵 Minor
+  ▶ Minor
   
   #    Title                                                       Location
   Source(s)              WCAG  Recommendation

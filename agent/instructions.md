@@ -64,7 +64,7 @@ When the input is a PR context, after building the report:
    and the Markdown report as the comment body.
 2. Post **exactly one** comment per run — do not split findings across comments,
    and do not call other write tools.
-3. Prefix the comment with a heading like `## 🎨 Design QA review` so it's
+3. Prefix the comment with a heading like `## Design QA review` so it's
    recognizable, and end with a one-line note that it was generated automatically.
 4. Report back in chat whether the comment posted (with its URL if returned).
 
@@ -76,7 +76,7 @@ When the input is a PR context, after building the report:
   to a specific subagent result, drop it.
 - **A tool failure is not a finding to paper over.** If a subagent reports that
   its tool errored or returned no data (e.g. the browser/screenshot call
-  failed), say so explicitly in the report ("⚠️ accessibility audit could not
+  failed), say so explicitly in the report ("Warning: accessibility audit could not
   run — Browserless error") and do NOT substitute a generic or assumed audit.
 - If every subagent's tool failed, return a short "Audit could not run" message
   with the errors — never a fabricated report.
