@@ -117,12 +117,15 @@ curl -u daniel:$ROUTE_AUTH_BASIC_PASSWORD -X POST \
 | Variable | Required | Purpose |
 |---|---|---|
 | `OPENROUTER_API_KEY` | yes | All model calls + the vision tool |
-| `BROWSERLESS_TOKEN` | yes | Headless Chrome (axe, screenshot, computed styles) |
+| `BROWSERLESS_TOKEN` | yes | Headless Chrome (axe, screenshot, computed styles); sent as `Authorization: Bearer` |
 | `BROWSERLESS_URL` | yes | Region base, e.g. `https://production-sfo.browserless.io` |
-| `ROUTE_AUTH_BASIC_PASSWORD` | yes (deployed) | HTTP Basic route auth |
+| `ROUTE_AUTH_BASIC_PASSWORD` | yes (deployed) | HTTP Basic route auth (omit/empty → deploy rejects non-local traffic) |
+| `ROUTE_AUTH_BASIC_USER` | no | Basic username (default `daniel`) |
 | `VISION_MODEL` | no | Vision model id (default `anthropic/claude-sonnet-4.6`) |
-| `DESIGN_TOKENS_URL` | no | Raw DTCG/Style-Dictionary JSON; without it the token check reports observed values only |
+| `DESIGN_TOKENS_URL` | no | Public http(s) DTCG/Style-Dictionary JSON; without it the token check reports observed values only |
 | `GITHUB_TOKEN` / `GITHUB_MCP_URL` | PR mode | GitHub PAT (Pull requests + Issues read/write) for posting comments |
+
+Tools only accept **public http(s) URLs** (no `file:`, localhost, or private/metadata IPs).
 
 ## Design notes (why it's built this way)
 
@@ -141,7 +144,7 @@ items, notably:
 - Vision judgment items can still over-assert on hierarchy/alt quality — spot-check.
 - All agents run on `claude-sonnet-4.6`; swap subagents to a cheaper verified
   model id to cut cost.
-- Redeploy after the Browserless unwrap / retry fix if production predates it.
+- Redeploy after the Browserless unwrap / retry / hardening fixes if production predates them.
 
 ---
 

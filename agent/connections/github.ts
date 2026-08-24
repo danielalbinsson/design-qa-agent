@@ -1,4 +1,5 @@
 import { defineMcpClientConnection } from "eve/connections";
+import { requireEnv } from "../lib/env";
 
 // GitHub's remote MCP server. The orchestrator discovers its tools via the
 // built-in `connection_search` and calls them as `github__<tool>` (e.g. a
@@ -19,6 +20,6 @@ export default defineMcpClientConnection({
   description:
     "GitHub: read pull request metadata and post review comments on PRs.",
   auth: {
-    getToken: async () => ({ token: process.env.GITHUB_TOKEN ?? "" }),
+    getToken: async () => ({ token: requireEnv("GITHUB_TOKEN") }),
   },
 });

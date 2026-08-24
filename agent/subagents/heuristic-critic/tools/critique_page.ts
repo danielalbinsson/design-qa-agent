@@ -1,6 +1,9 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { browserlessFunction } from "../../../lib/browserless";
+import { requireEnv } from "../../../lib/env";
+import { extractJsonArray } from "../../../lib/json";
+import { assertPublicHttpUrl } from "../../../lib/url";
 
 // Capture screenshot + interaction geometry in one Browserless session, then
 // critique with a vision model. Target-size findings are *measured* from the
@@ -8,6 +11,8 @@ import { browserlessFunction } from "../../../lib/browserless";
 // eve tool results are text/json — the vision call must live here.
 const VISION_MODEL = process.env.VISION_MODEL ?? "anthropic/claude-sonnet-4.6";
 const MIN_TARGET_PX = 24;
+/** Skip vision if the JPEG base64 exceeds this (chars ≈ 3/4 of decoded bytes). */
+const MAX_SCREENSHOT_BASE64_CHARS = 3_500_000;
 
 type Focusable = {
   index: number;
@@ -28,13 +33,22 @@ type CapturePayload = {
   interaction?: { focusables?: Focusable[]; count?: number };
 };
 
+const visionItemSchema = z.object({
+  title: z.string(),
+  region: z.string(),
+  impact: z.enum(["critical", "serious", "moderate", "minor"]),
+  wcag: z.string().optional(),
+  recommendation: z.string(),
+});
+
 function buildCaptureCode(url: string): string {
   return `export default async function ({ page }) {
     await page.goto(${JSON.stringify(url)}, { waitUntil: "networkidle2", timeout: 60000 });
     const screenshotBase64 = await page.screenshot({
       encoding: "base64",
       fullPage: true,
-      type: "png",
+      type: "jpeg",
+      quality: 60,
     });
     const interaction = await page.evaluate(() => {
       const sel =
@@ -120,6 +134,31 @@ ${focusableText}
 Return ONLY a JSON array. Each item: {"title","region","impact":"critical|serious|moderate|minor","wcag"(optional),"recommendation"}. No prose.`;
 }
 
+function parseVisionItems(raw: string): unknown {
+  try {
+    const parsed = extractJsonArray(raw);
+    const checked = z.array(visionItemSchema).safeParse(parsed);
+    if (checked.success) return checked.data;
+    return [
+      {
+        title: "Vision output was not valid JSON",
+        region: "n/a",
+        impact: "minor",
+        recommendation: raw.slice(0, 400),
+      },
+    ];
+  } catch {
+    return [
+      {
+        title: "Vision output was not valid JSON",
+        region: "n/a",
+        impact: "minor",
+        recommendation: raw.slice(0, 400),
+      },
+    ];
+  }
+}
+
 export default defineTool({
   description:
     "Capture a full-page screenshot plus measured focusable geometry for a URL, then critique UX with a vision model. Returns measured target-size findings and vision judgment items. Optional axeContext avoids re-reporting a11y-auditor issues.",
@@ -133,8 +172,9 @@ export default defineTool({
       ),
   }),
   async execute({ url, axeContext }) {
+    const safeUrl = await assertPublicHttpUrl(url);
     const capture = await browserlessFunction<CapturePayload>(
-      buildCaptureCode(url),
+      buildCaptureCode(safeUrl),
     );
 
     const auditedUrl = capture.url ?? "";
@@ -148,10 +188,42 @@ export default defineTool({
     const measured = measuredTargetFindings(focusables);
     const focusableText = formatFocusables(focusables);
 
+    const base: {
+      requestedUrl: string;
+      auditedTitle: string;
+      auditedUrl: string;
+      focusableCount: number;
+      focusables: Focusable[];
+      measuredFindings: ReturnType<typeof measuredTargetFindings>;
+      items: unknown;
+    } = {
+      requestedUrl: url,
+      auditedTitle: capture.title ?? "",
+      auditedUrl,
+      focusableCount: capture.interaction?.count ?? focusables.length,
+      focusables,
+      measuredFindings: measured,
+      items: [],
+    };
+
+    if (capture.screenshotBase64.length > MAX_SCREENSHOT_BASE64_CHARS) {
+      base.items = [
+        {
+          title: "Screenshot too large for vision critique",
+          region: "n/a",
+          impact: "moderate",
+          recommendation:
+            "Full-page JPEG exceeded the size cap; vision judgment was skipped. Measured target-size findings above are still valid. Retry with a shorter page or viewport-only capture.",
+        },
+      ];
+      return base;
+    }
+
+    const apiKey = requireEnv("OPENROUTER_API_KEY");
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -164,7 +236,7 @@ export default defineTool({
               {
                 type: "image_url",
                 image_url: {
-                  url: `data:image/png;base64,${capture.screenshotBase64}`,
+                  url: `data:image/jpeg;base64,${capture.screenshotBase64}`,
                 },
               },
             ],
@@ -183,30 +255,7 @@ export default defineTool({
       choices?: { message?: { content?: string } }[];
     };
     const raw = json.choices?.[0]?.message?.content ?? "[]";
-
-    const cleaned = raw.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
-    let items: unknown = [];
-    try {
-      items = JSON.parse(cleaned);
-    } catch {
-      items = [
-        {
-          title: "Vision output was not valid JSON",
-          region: "n/a",
-          impact: "minor",
-          recommendation: raw.slice(0, 400),
-        },
-      ];
-    }
-
-    return {
-      requestedUrl: url,
-      auditedTitle: capture.title ?? "",
-      auditedUrl,
-      focusableCount: capture.interaction?.count ?? focusables.length,
-      focusables,
-      measuredFindings: measured,
-      items,
-    };
+    base.items = parseVisionItems(raw);
+    return base;
   },
 });

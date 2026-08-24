@@ -33,11 +33,12 @@ Variables:
 | Variable | Required | Notes |
 |---|---|---|
 | `OPENROUTER_API_KEY` | yes | Model calls for every agent + the vision tool. |
-| `BROWSERLESS_TOKEN` | yes | Headless Chrome for axe / screenshot / computed styles. |
+| `BROWSERLESS_TOKEN` | yes | Headless Chrome for axe / screenshot / computed styles (Authorization header). |
 | `BROWSERLESS_URL` | yes | Your region base, e.g. `https://production-sfo.browserless.io`. |
 | `VISION_MODEL` | no | Defaults to `anthropic/claude-sonnet-4.6`. |
-| `DESIGN_TOKENS_URL` | no | DTCG/Style Dictionary JSON; omit to report observed values only. |
-| `ROUTE_AUTH_BASIC_PASSWORD` | yes | HTTP Basic password — must match `curl -u daniel:$ROUTE_AUTH_BASIC_PASSWORD`. |
+| `DESIGN_TOKENS_URL` | no | Public http(s) DTCG/Style Dictionary JSON; omit to report observed values only. |
+| `ROUTE_AUTH_BASIC_PASSWORD` | yes | HTTP Basic password — must match `curl -u $ROUTE_AUTH_BASIC_USER:$ROUTE_AUTH_BASIC_PASSWORD`. Empty → deploy rejects traffic. |
+| `ROUTE_AUTH_BASIC_USER` | no | Defaults to `daniel`. |
 | `GITHUB_TOKEN` | for PR mode | GitHub PAT (Pull requests: read+write) for the `github` connection. |
 | `GITHUB_MCP_URL` | no | Override the GitHub MCP server URL. |
 
@@ -45,9 +46,10 @@ Because the agents use a **direct OpenRouter provider** (not the Vercel AI
 Gateway), you do **not** need `AI_GATEWAY_API_KEY` or gateway OIDC for model
 calls.
 
-Route auth is **`httpBasic({ username: "daniel", password: ROUTE_AUTH_BASIC_PASSWORD })`
-+ `localDev()`** in `agent/channels/eve.ts`. Do not rely on `vercelOidc()` for
+Route auth is **`httpBasic` (only when `ROUTE_AUTH_BASIC_PASSWORD` is set) +
+`localDev()`** in `agent/channels/eve.ts`. Do not rely on `vercelOidc()` for
 driving this deployment — the local CLI OIDC token often fails project matching.
+Audit targets and `DESIGN_TOKENS_URL` must be **public http(s)** URLs.
 
 ## 3. Deploy
 
@@ -99,12 +101,19 @@ while a child 404’d on the model.
 
 - **Build fails on a provider import** → make sure `@openrouter/ai-sdk-provider`
   is in `dependencies` (it is) and the version matches your eve toolchain.
-- **All turns 401** → route auth working; use `curl -u daniel:$ROUTE_AUTH_BASIC_PASSWORD`.
+- **All turns 401** → route auth working; use `curl -u $ROUTE_AUTH_BASIC_USER:$ROUTE_AUTH_BASIC_PASSWORD`.
+- **All turns rejected / no Basic accepted** → `ROUTE_AUTH_BASIC_PASSWORD` is
+  empty; httpBasic is not registered (fail-closed). Set the env var and redeploy.
+- **Tool rejects URL** → only public http(s) URLs are allowed (no localhost /
+  private / metadata hosts).
 - **Tool calls time out** → Browserless cold start + page load; bump the
   function's max duration in Vercel project settings if needed.
 - **a11y / styles return empty title/url** → Browserless `/function` payloads must
   unwrap `{ data, type }` (handled in `agent/lib/browserless.ts`). Redeploy if
   prod predates that fix.
-- **429 from Browserless** → concurrent specialist calls; tools retry with backoff.
+- **429 from Browserless** → concurrent specialist calls; tools retry with backoff
+  (including network errors).
 - **Vision tool returns "not valid JSON"** → the model wrapped output; the tool
-  already strips code fences, but check `VISION_MODEL` actually supports images.
+  extracts the first JSON array, but check `VISION_MODEL` actually supports images.
+- **Screenshot too large for vision** → full-page JPEG exceeded the size cap;
+  measured findings still return; vision judgment is skipped.

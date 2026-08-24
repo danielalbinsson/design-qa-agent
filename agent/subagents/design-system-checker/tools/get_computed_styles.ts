@@ -1,6 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { browserlessFunction } from "../../../lib/browserless";
+import { assertPublicHttpUrl } from "../../../lib/url";
 
 // Collects the *rendered* style values on the page (computed styles), so we can
 // compare them against design tokens. Runs inside Browserless's browser.
@@ -48,7 +49,8 @@ export default defineTool({
     url: z.string().url(),
   }),
   async execute({ url }) {
-    const out = await browserlessFunction<StylesPayload>(buildStylesCode(url));
+    const safeUrl = await assertPublicHttpUrl(url);
+    const out = await browserlessFunction<StylesPayload>(buildStylesCode(safeUrl));
 
     const auditedUrl = out.url ?? "";
     if (!auditedUrl) {

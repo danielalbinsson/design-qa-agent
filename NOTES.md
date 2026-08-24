@@ -91,6 +91,11 @@ OpenRouter models. Deployed on Vercel.
    sub-24×24px targets in-page; orchestrator is **staged** (a11y + design-system
    → heuristic with `axeContext`). Vision no longer invents target-size failures.
 
+10. **Hardening pass** — public http(s) URL guard (SSRF), Browserless
+    `Authorization: Bearer` (no `?token=`), fail-closed Basic when password is
+    empty, JPEG + size-capped vision, stricter JSON extract, axe-core version
+    pin after inject, `pnpm test` for helpers.
+
 ## Known issues / open items
 
 - **Vision judgment can still over-assert** on hierarchy / alt-text quality —
@@ -104,8 +109,9 @@ OpenRouter models. Deployed on Vercel.
   probe if you need to debug the tool layer again.
 - **Design tokens**: set `DESIGN_TOKENS_URL` to a raw DTCG/Style Dictionary JSON
   to turn `design-system-checker` from "observed values" into pass/fail.
-- **Prod lag.** Redeploy after the unwrap / retry / grounded-critic changes;
-  older deployments still drop `/function` results.
+- **Prod lag.** Redeploy after the unwrap / retry / grounded-critic / hardening
+  changes; older deployments still drop `/function` results or use query-string
+  Browserless tokens.
 
 ## How to run
 

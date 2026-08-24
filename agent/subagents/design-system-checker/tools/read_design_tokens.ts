@@ -1,5 +1,6 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
+import { assertPublicHttpUrl } from "../../../lib/url";
 
 // Loads the design system's tokens. Source priority:
 //   1. `source` input (a URL to a DTCG / Style Dictionary JSON), else
@@ -17,11 +18,12 @@ export default defineTool({
     if (!url) {
       return { configured: false as const };
     }
-    const res = await fetch(url);
+    const safeUrl = await assertPublicHttpUrl(url);
+    const res = await fetch(safeUrl);
     if (!res.ok) {
-      throw new Error(`Failed to fetch design tokens: ${res.status} ${url}`);
+      throw new Error(`Failed to fetch design tokens: ${res.status} ${safeUrl}`);
     }
     const tokens = await res.json();
-    return { configured: true as const, source: url, tokens };
+    return { configured: true as const, source: safeUrl, tokens };
   },
 });

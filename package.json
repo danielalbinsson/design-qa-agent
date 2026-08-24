@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "eve dev",
     "build": "eve build",
-    "start": "eve start"
+    "start": "eve start",
+    "test": "node --test --experimental-strip-types agent/lib/*.test.ts"
   },
   "dependencies": {
     "@openrouter/ai-sdk-provider": "^2.10.0",

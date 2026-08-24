@@ -6,7 +6,14 @@
  * bare payload if Browserless ever flattens it).
  *
  * Concurrent fan-out from the three specialists can hit 429; retry with backoff.
+ * Auth uses the Authorization header (not `?token=`) so the secret stays out of
+ * URLs and proxy/access logs.
  */
+
+import { requireEnv } from "./env";
+import { unwrapBrowserlessData } from "./browserless-unwrap";
+
+export { unwrapBrowserlessData } from "./browserless-unwrap";
 
 export const BROWSERLESS_BASE =
   process.env.BROWSERLESS_URL ?? "https://production-sfo.browserless.io";
@@ -19,18 +26,11 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Unwrap `{ data, type }` envelopes; pass through already-flat payloads. */
-export function unwrapBrowserlessData<T extends Record<string, unknown>>(
-  raw: unknown,
-): T {
-  if (!raw || typeof raw !== "object") {
-    throw new Error(`Browserless returned non-object JSON: ${typeof raw}`);
-  }
-  const obj = raw as Record<string, unknown>;
-  if ("data" in obj && obj.data && typeof obj.data === "object") {
-    return obj.data as T;
-  }
-  return obj as T;
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  return {
+    Authorization: `Bearer ${requireEnv("BROWSERLESS_TOKEN")}`,
+    ...extra,
+  };
 }
 
 async function fetchWithRetry(
@@ -40,21 +40,36 @@ async function fetchWithRetry(
 ): Promise<Response> {
   let lastErr = "";
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const res = await fetch(url, init);
-    if (res.ok) return res;
+    let retryAfterMs: number | undefined;
+    try {
+      const res = await fetch(url, init);
+      if (res.ok) return res;
 
-    const body = await res.text();
-    lastErr = `${res.status} ${body.slice(0, 400)}`;
+      const body = await res.text();
+      lastErr = `${res.status} ${body.slice(0, 400)}`;
 
-    if (!RETRYABLE.has(res.status) || attempt === MAX_ATTEMPTS) {
-      throw new Error(`Browserless ${label} failed: ${lastErr}`);
+      if (!RETRYABLE.has(res.status) || attempt === MAX_ATTEMPTS) {
+        throw new Error(`Browserless ${label} failed: ${lastErr}`);
+      }
+
+      const retryAfter = Number(res.headers.get("retry-after"));
+      if (Number.isFinite(retryAfter) && retryAfter > 0) {
+        retryAfterMs = retryAfter * 1000;
+      }
+    } catch (err) {
+      // Network / DNS / abort errors — retry unless this was a final HTTP throw.
+      if (err instanceof Error && err.message.startsWith(`Browserless ${label} failed:`)) {
+        throw err;
+      }
+      lastErr = err instanceof Error ? err.message.slice(0, 400) : String(err).slice(0, 400);
+      if (attempt === MAX_ATTEMPTS) {
+        throw new Error(`Browserless ${label} failed: ${lastErr}`);
+      }
     }
 
-    // Exponential backoff + jitter; honor Retry-After seconds when present.
-    const retryAfter = Number(res.headers.get("retry-after"));
-    const delayMs = Number.isFinite(retryAfter) && retryAfter > 0
-      ? retryAfter * 1000
-      : BASE_DELAY_MS * 2 ** (attempt - 1) + Math.floor(Math.random() * 200);
+    const delayMs =
+      retryAfterMs ??
+      BASE_DELAY_MS * 2 ** (attempt - 1) + Math.floor(Math.random() * 200);
     await sleep(delayMs);
   }
   throw new Error(`Browserless ${label} failed: ${lastErr}`);
@@ -65,10 +80,10 @@ export async function browserlessFunction<T extends Record<string, unknown>>(
   code: string,
 ): Promise<T> {
   const res = await fetchWithRetry(
-    `${BROWSERLESS_BASE}/function?token=${process.env.BROWSERLESS_TOKEN}`,
+    `${BROWSERLESS_BASE}/function`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/javascript" },
+      headers: authHeaders({ "Content-Type": "application/javascript" }),
       body: code,
     },
     "/function",
@@ -76,15 +91,15 @@ export async function browserlessFunction<T extends Record<string, unknown>>(
   return unwrapBrowserlessData<T>(await res.json());
 }
 
-/** POST JSON to `/screenshot`; returns raw PNG bytes. */
+/** POST JSON to `/screenshot`; returns raw image bytes. */
 export async function browserlessScreenshot(
   body: Record<string, unknown>,
 ): Promise<ArrayBuffer> {
   const res = await fetchWithRetry(
-    `${BROWSERLESS_BASE}/screenshot?token=${process.env.BROWSERLESS_TOKEN}`,
+    `${BROWSERLESS_BASE}/screenshot`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
     },
     "/screenshot",
